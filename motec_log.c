@@ -278,7 +278,7 @@ void write_ld_channel(LDChannel* channel, FILE* f, int channel_index) {
     fwrite(channel->name, sizeof(char), 32, f);
     fwrite(channel->short_name, sizeof(char), 8, f);
     fwrite(channel->unit, sizeof(char), 12, f);
-}
+} */
 
 void motec_log_set_metadata(MotecLog* log,
                            const char* driver,
@@ -302,7 +302,7 @@ void motec_log_set_metadata(MotecLog* log,
     if (event_session) strncpy(log->event_session, event_session, sizeof(log->event_session)-1);
     if (long_comment) strncpy(log->long_comment, long_comment, sizeof(log->long_comment)-1);
     if (short_comment) strncpy(log->short_comment, short_comment, sizeof(log->short_comment)-1);
-} */
+} 
 
 void write_ld_channel(LDChannel* channel, FILE* f, int channel_index) {
     // Calculate data type flags similar to Python implementation
