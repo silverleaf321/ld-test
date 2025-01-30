@@ -3,6 +3,8 @@
 
 #define INITIAL_CHANNEL_CAPACITY 1000
 
+
+// Creates new MotecLog structure
 MotecLog* motec_log_create(void) {
     MotecLog* log = (MotecLog*)malloc(sizeof(MotecLog));
     if (!log) return NULL;
@@ -254,7 +256,7 @@ void write_ld_header(LDHeader* header, FILE* f, int channel_count) {
         }
     }
 }
-
+/*
 void write_ld_channel(LDChannel* channel, FILE* f, int channel_index) {
 
     fwrite(&channel->prev_meta_ptr, sizeof(int), 1, f);
@@ -300,4 +302,40 @@ void motec_log_set_metadata(MotecLog* log,
     if (event_session) strncpy(log->event_session, event_session, sizeof(log->event_session)-1);
     if (long_comment) strncpy(log->long_comment, long_comment, sizeof(log->long_comment)-1);
     if (short_comment) strncpy(log->short_comment, short_comment, sizeof(log->short_comment)-1);
+} */
+
+void write_ld_channel(LDChannel* channel, FILE* f, int channel_index) {
+    // Calculate data type flags similar to Python implementation
+    uint16_t dtype_a = (channel->dtype == DTYPE_FLOAT32 || channel->dtype == DTYPE_FLOAT16) ? 0x07 : 0x00;
+    uint16_t dtype = (channel->dtype == DTYPE_FLOAT16 || channel->dtype == DTYPE_INT16) ? 2 : 4;
+    
+    // Magic number from Python implementation (0x2ee1 + n)
+    uint16_t magic = 0x2ee1 + channel_index;
+
+    // Write all fields in order matching Python struct.pack
+    fwrite(&channel->prev_meta_ptr, sizeof(int32_t), 1, f);
+    fwrite(&channel->next_meta_ptr, sizeof(int32_t), 1, f);
+    fwrite(&channel->data_ptr, sizeof(int32_t), 1, f);
+    fwrite(&channel->data_len, sizeof(int32_t), 1, f);
+    fwrite(&magic, sizeof(uint16_t), 1, f);
+    fwrite(&dtype_a, sizeof(uint16_t), 1, f);
+    fwrite(&dtype, sizeof(uint16_t), 1, f);
+    fwrite(&channel->freq, sizeof(int16_t), 1, f);
+    fwrite(&channel->shift, sizeof(int16_t), 1, f);
+    fwrite(&channel->mul, sizeof(int16_t), 1, f);
+    fwrite(&channel->scale, sizeof(int16_t), 1, f);
+    fwrite(&channel->dec, sizeof(int16_t), 1, f);
+
+    // Write strings with fixed lengths
+    char name_buf[32] = {0};
+    char short_name_buf[8] = {0};
+    char unit_buf[12] = {0};
+
+    strncpy(name_buf, channel->name, 31);
+    strncpy(short_name_buf, channel->short_name, 7);
+    strncpy(unit_buf, channel->unit, 11);
+
+    fwrite(name_buf, sizeof(char), 32, f);
+    fwrite(short_name_buf, sizeof(char), 8, f);
+    fwrite(unit_buf, sizeof(char), 12, f);
 }
