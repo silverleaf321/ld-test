@@ -24,8 +24,8 @@ typedef struct {
     char short_comment[64];
     time_t datetime;
     
-    LDHeader* ld_header;
-    LDChannel** ld_channels;
+    ldHead* ld_header;
+    ldChan** ld_channels;
     int channel_count;
     int channel_capacity;
 } MotecLog;
@@ -36,9 +36,9 @@ int motec_log_initialize(MotecLog* log);
 int motec_log_add_channel(MotecLog* log, Channel* channel);
 int motec_log_add_all_channels(MotecLog* log, DataLog* data_log);
 int motec_log_write(MotecLog* log, const char* filename);
-void write_ld_header(LDHeader* header, FILE* f, int channel_count);
+void write_ld_header(ldHead* header, FILE* f, int channel_count);
 // void write_ld_channel(LDChannel* channel, FILE* f, int channel_index);
-void write_ld_channel(LDChannel* channel, FILE* f, int channel_index);
+void write_ld_channel(ldChan* channel, FILE* f, int channel_index);
 
 void motec_log_set_metadata(MotecLog* log, 
                            const char* driver,
