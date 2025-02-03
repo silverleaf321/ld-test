@@ -1,107 +1,129 @@
 #include "ldparser.h"
-#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
-
-static void decode_string(char* dest, const char* src, size_t max_len) {
-    strncpy(dest, src, max_len - 1);
-    dest[max_len - 1] = '\0';
+// Helper function to decode strings
+char* decode_string(const char* bytes, size_t len) {
+    char* result = malloc(len + 1);
+    if (!result) return NULL;
     
-    size_t len = strlen(dest);
-    while (len > 0 && (dest[len-1] == '\0' || dest[len-1] == ' ')) {
-        dest[--len] = '\0';
-    }
+    memcpy(result, bytes, len);
+    result[len] = '\0';
+    
+    // Trim trailing nulls and whitespace
+    size_t end = len;
+    while (end > 0 && (result[end-1] == '\0' || result[end-1] == ' '))
+        end--;
+    
+    result[end] = '\0';
+    return result;
 }
 
-
-static void* read_channel_data(FILE* f, LDChannel* chan) {
-    void* data = NULL;
-    size_t element_size;
+// Read vehicle information
+ldVehicle* read_vehicle(FILE* f) {
+    ldVehicle* vehicle = malloc(sizeof(ldVehicle));
+    if (!vehicle) return NULL;
     
-    switch(chan->dtype) {
-        case DTYPE_FLOAT32:
-            element_size = sizeof(float);
-            break;
-        case DTYPE_INT32:
-            element_size = sizeof(int32_t);
-            break;
-        case DTYPE_FLOAT16:
-        case DTYPE_INT16:
-            element_size = sizeof(int16_t);
-            break;
-        default:
-            return NULL;
+    char id[64];
+    uint32_t weight;
+    char type[32];
+    char comment[32];
+    
+    if (fread(id, 64, 1, f) != 1 ||
+        fread(&weight, 4, 1, f) != 1 ||
+        fread(type, 32, 1, f) != 1 ||
+        fread(comment, 32, 1, f) != 1) {
+        free(vehicle);
+        return NULL;
     }
     
-    data = malloc(chan->data_len * element_size);
-    if (!data) return NULL;
+    memcpy(vehicle->id, id, 64);
+    vehicle->weight = weight;
+    memcpy(vehicle->type, type, 32);
+    memcpy(vehicle->comment, comment, 32);
     
-    fseek(f, chan->data_ptr, SEEK_SET);
-    fread(data, element_size, chan->data_len, f);
-    
-    if (chan->dtype == DTYPE_FLOAT32) {
-        float* fdata = (float*)data;
-        for (int i = 0; i < chan->data_len; i++) {
-            fdata[i] = (fdata[i] / chan->scale * pow(10, -chan->dec) + chan->shift) * chan->mul;
-        }
-    }
-    
-    return data;
+    return vehicle;
 }
 
-static LDChannel* read_channel(FILE* f, int meta_ptr) {
-    LDChannel* chan = malloc(sizeof(LDChannel));
-    if (!chan) return NULL;
+// Read venue information
+ldVenue* read_venue(FILE* f) {
+    ldVenue* venue = malloc(sizeof(ldVenue));
+    if (!venue) return NULL;
     
-    fseek(f, meta_ptr, SEEK_SET);
+    char name[64];
+    uint16_t vehicle_ptr;
     
-    fread(&chan->prev_meta_ptr, sizeof(int), 1, f);
-    fread(&chan->next_meta_ptr, sizeof(int), 1, f);
-    fread(&chan->data_ptr, sizeof(int), 1, f);
-    fread(&chan->data_len, sizeof(int), 1, f);
+    if (fread(name, 64, 1, f) != 1 ||
+        fseek(f, 1034, SEEK_CUR) != 0 ||  // Skip 1034 bytes
+        fread(&vehicle_ptr, 2, 1, f) != 1) {
+        free(venue);
+        return NULL;
+    }
     
-    uint16_t dtype_a, dtype;
-    fread(&dtype_a, sizeof(uint16_t), 1, f);
-    fread(&dtype, sizeof(uint16_t), 1, f);
+    memcpy(venue->name, name, 64);
+    venue->vehicle_ptr = vehicle_ptr;
     
-    if (dtype_a == 0x07) {
-        chan->dtype = (dtype == 2) ? DTYPE_FLOAT16 : DTYPE_FLOAT32;
+    if (vehicle_ptr > 0) {
+        long pos = ftell(f);
+        fseek(f, vehicle_ptr, SEEK_SET);
+        venue->vehicle = read_vehicle(f);
+        fseek(f, pos, SEEK_SET);
     } else {
-        chan->dtype = (dtype == 2) ? DTYPE_INT16 : DTYPE_INT32;
+        venue->vehicle = NULL;
     }
     
-    fread(&chan->freq, sizeof(int16_t), 1, f);
-    fread(&chan->shift, sizeof(int16_t), 1, f);
-    fread(&chan->mul, sizeof(int16_t), 1, f);
-    fread(&chan->scale, sizeof(int16_t), 1, f);
-    fread(&chan->dec, sizeof(int16_t), 1, f);
-    
-    char temp[32];
-    fread(temp, 32, 1, f);
-    decode_string(chan->name, temp, sizeof(chan->name));
-    
-    fread(temp, 8, 1, f);
-    decode_string(chan->short_name, temp, sizeof(chan->short_name));
-    
-    fread(temp, 12, 1, f);
-    decode_string(chan->unit, temp, sizeof(chan->unit));
-    
-    chan->data = read_channel_data(f, chan);
-    
-    return chan;
+    return venue;
 }
 
-LDData* ld_read_file(const char* filename) {
+// Read event information
+ldEvent* read_event(FILE* f) {
+    ldEvent* event = malloc(sizeof(ldEvent));
+    if (!event) return NULL;
+    
+    char name[64];
+    char session[64];
+    char comment[1024];
+    uint16_t venue_ptr;
+    
+    if (fread(name, 64, 1, f) != 1 ||
+        fread(session, 64, 1, f) != 1 ||
+        fread(comment, 1024, 1, f) != 1 ||
+        fread(&venue_ptr, 2, 1, f) != 1) {
+        free(event);
+        return NULL;
+    }
+    
+    memcpy(event->name, name, 64);
+    memcpy(event->session, session, 64);
+    memcpy(event->comment, comment, 1024);
+    event->venue_ptr = venue_ptr;
+    
+    if (venue_ptr > 0) {
+        long pos = ftell(f);
+        fseek(f, venue_ptr, SEEK_SET);
+        event->venue = read_venue(f);
+        fseek(f, pos, SEEK_SET);
+    } else {
+        event->venue = NULL;
+    }
+    
+    return event;
+}
+
+// Main function to read an LD file
+ldData* read_ldfile(const char* filename) {
     FILE* f = fopen(filename, "rb");
     if (!f) return NULL;
     
-    LDData* data = malloc(sizeof(LDData));
+    ldData* data = malloc(sizeof(ldData));
     if (!data) {
         fclose(f);
         return NULL;
     }
     
-    data->head = malloc(sizeof(LDHeader));
+    // Read header
+    data->head = read_head(f);
     if (!data->head) {
         free(data);
         fclose(f);
@@ -109,100 +131,45 @@ LDData* ld_read_file(const char* filename) {
     }
     
     // Read channels
-    data->channels = malloc(sizeof(LDChannel*) * MAX_CHANNELS);
-    data->channel_count = 0;
-    
-    int meta_ptr = data->head->meta_ptr;
-    while (meta_ptr && data->channel_count < MAX_CHANNELS) {
-        LDChannel* chan = read_channel(f, meta_ptr);
-        if (!chan) break;
-        
-        data->channels[data->channel_count++] = chan;
-        meta_ptr = chan->next_meta_ptr;
+    data->channs = read_channels(filename, data->head->meta_ptr, &data->chann_count);
+    if (!data->channs) {
+        free(data->head);
+        free(data);
+        fclose(f);
+        return NULL;
     }
     
     fclose(f);
     return data;
 }
 
-void ld_free_data(LDData* data) {
+// Free allocated memory
+void free_lddata(ldData* data) {
     if (!data) return;
     
     if (data->head) {
-        if (data->head->aux) {
-            if (data->head->aux->venue) {
-                if (data->head->aux->venue->vehicle) {
-                    free(data->head->aux->venue->vehicle);
+        if (data->head->event) {
+            if (data->head->event->venue) {
+                if (data->head->event->venue->vehicle) {
+                    free(data->head->event->venue->vehicle);
                 }
-                free(data->head->aux->venue);
+                free(data->head->event->venue);
             }
-            free(data->head->aux);
+            free(data->head->event);
         }
         free(data->head);
     }
     
-    for (int i = 0; i < data->channel_count; i++) {
-        if (data->channels[i]) {
-            if (data->channels[i]->data) {
-                free(data->channels[i]->data);
+    if (data->channs) {
+        for (size_t i = 0; i < data->chann_count; i++) {
+            if (data->channs[i]) {
+                free(data->channs[i]->data);
+                free(data->channs[i]->file_path);
+                free(data->channs[i]);
             }
-            free(data->channels[i]);
         }
+        free(data->channs);
     }
     
-    free(data->channels);
     free(data);
-}
-
-void ld_write_file(LDData* data, const char* filename) {
-    FILE* f = fopen(filename, "wb");
-    if (!f) {
-        return;
-    }
-
-    // Write header
-    fwrite(data->head, sizeof(LDHeader), 1, f);
-
-    // Write channels
-    for (int i = 0; i < data->channel_count; i++) {
-        LDChannel* channel = data->channels[i];
-        
-        // Write channel metadata
-        fwrite(&channel->meta_ptr, sizeof(int), 1, f);
-        fwrite(&channel->prev_meta_ptr, sizeof(int), 1, f);
-        fwrite(&channel->next_meta_ptr, sizeof(int), 1, f);
-        fwrite(&channel->data_ptr, sizeof(int), 1, f);
-        fwrite(&channel->data_len, sizeof(int), 1, f);
-        fwrite(&channel->dtype, sizeof(DataType), 1, f);
-        fwrite(&channel->freq, sizeof(int), 1, f);
-        fwrite(&channel->shift, sizeof(int), 1, f);
-        fwrite(&channel->mul, sizeof(int), 1, f);
-        fwrite(&channel->scale, sizeof(int), 1, f);
-        fwrite(&channel->dec, sizeof(int), 1, f);
-        fwrite(channel->name, sizeof(char), 32, f);
-        fwrite(channel->short_name, sizeof(char), 8, f);
-        fwrite(channel->unit, sizeof(char), 12, f);
-
-        // Write channel data
-        if (channel->data && channel->data_len > 0) {
-            size_t data_size;
-            switch (channel->dtype) {
-                case DTYPE_FLOAT16:
-                case DTYPE_INT16:
-                    data_size = 2;
-                    break;
-                case DTYPE_FLOAT32:
-                case DTYPE_INT32:
-                    data_size = 4;
-                    break;
-                default:
-                    data_size = 0;
-            }
-            if (data_size > 0) {
-                fwrite(channel->data, data_size, channel->data_len, f);
-            }
-        }
-    }
-
-    fclose(f);
 }

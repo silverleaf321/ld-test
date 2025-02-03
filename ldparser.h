@@ -2,89 +2,94 @@
 #define LDPARSER_H
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdint.h>
 #include <time.h>
 
-#define MAX_STRING_LENGTH 1024
-#define MAX_CHANNELS 500
+// Forward declarations
+struct ldVehicle;
+struct ldVenue;
+struct ldEvent;
+struct ldHead;
+struct ldChan;
+struct ldData;
 
-// channel data dataypes
-typedef enum {
-    DTYPE_FLOAT16,
-    DTYPE_FLOAT32,
-    DTYPE_INT16,
-    DTYPE_INT32
-} DataType;
-
-// channel structure
-typedef struct {
-    int meta_ptr;
-    int prev_meta_ptr;
-    int next_meta_ptr;
-    int data_ptr;
-    int data_len;
-    DataType dtype;
-    int freq;
-    int shift;
-    int mul;
-    int scale;
-    int dec;
-    char name[32];
-    char short_name[8];
-    char unit[12];
-    void* data;  
-} LDChannel;
-
-// vehicle info
-typedef struct {
+// Structures matching Python classes
+typedef struct ldVehicle {
     char id[64];
-    unsigned int weight;
+    uint32_t weight;
     char type[32];
     char comment[32];
-} LDVehicle;
+} ldVehicle;
 
-// more vehicle info
-typedef struct {
+typedef struct ldVenue {
     char name[64];
-    int vehicle_ptr;
-    LDVehicle* vehicle;
-} LDVenue;
+    uint16_t vehicle_ptr;
+    ldVehicle* vehicle;
+} ldVenue;
 
-// event info
-typedef struct {
+typedef struct ldEvent {
     char name[64];
     char session[64];
     char comment[1024];
-    int venue_ptr;
-    LDVenue* venue;
-} LDEvent;
+    uint16_t venue_ptr;
+    ldVenue* venue;
+} ldEvent;
 
-typedef struct {
-    int meta_ptr;
-    int data_ptr;
-    int aux_ptr;
-    LDEvent* aux;
+typedef struct ldHead {
+    uint32_t meta_ptr;
+    uint32_t data_ptr;
+    uint32_t event_ptr;
+    ldEvent* event;
     char driver[64];
     char vehicleid[64];
     char venue[64];
-    time_t datetime;
+    struct tm datetime;
     char short_comment[64];
-    char event[64];
-    char session[64];
-} LDHeader;
+} ldHead;
 
-typedef struct {
-    LDHeader* head;
-    LDChannel** channels;
-    int channel_count;
-} LDData;
+typedef struct ldChan {
+    char* file_path;
+    uint32_t meta_ptr;
+    float* data;
+    
+    uint32_t prev_meta_ptr;
+    uint32_t next_meta_ptr;
+    uint32_t data_ptr;
+    uint32_t data_len;
+    
+    uint16_t dtype;
+    uint16_t freq;
+    int16_t shift;
+    int16_t mul;
+    int16_t scale;
+    int16_t dec;
+    
+    char name[32];
+    char short_name[8];
+    char unit[12];
+} ldChan;
 
-LDData* ld_read_file(const char* filename);
-void ld_free_data(LDData* data);
-LDChannel* ld_get_channel_by_name(LDData* data, const char* name);
-void ld_write_file(LDData* data, const char* filename);
+typedef struct ldData {
+    ldHead* head;
+    ldChan** channs;
+    size_t chann_count;
+} ldData;
 
+// Function declarations
+ldData* read_ldfile(const char* filename);
+void free_lddata(ldData* data);
 
+ldVehicle* read_vehicle(FILE* f);
+ldVenue* read_venue(FILE* f);
+ldEvent* read_event(FILE* f);
+ldHead* read_head(FILE* f);
+ldChan* read_channel(const char* filename, uint32_t meta_ptr);
+ldChan** read_channels(const char* filename, uint32_t meta_ptr, size_t* count);
 
-#endif
+void write_ldfile(const char* filename, ldData* data);
+
+// Helper functions
+char* decode_string(const char* bytes, size_t len);
+float* read_channel_data(FILE* f, ldChan* chan);
+
+#endif // LDPARSER_H
