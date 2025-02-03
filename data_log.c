@@ -152,7 +152,7 @@ int datalog_from_csv_log(DataLog* log, FILE* f) {
 
 
 void data_log_print_channels(DataLog* log) {
-    printf("Parsed %.1fs log with %d channels:\n", datalog_duration(log), log->channel_count);
+    printf("Parsed %.1fs log with %zu channels:\n", datalog_duration(log), log->channel_count);
     
     for (size_t i = 0; i < log->channel_count; i++) {
         Channel* channel = log->channels[i];
