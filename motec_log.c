@@ -12,7 +12,7 @@ MotecLog* motec_log_create(void) {
     memset(log, 0, sizeof(MotecLog));
     
     log->channel_capacity = INITIAL_CHANNEL_CAPACITY;
-    log->ld_channels = (LDChannel**)malloc(sizeof(LDChannel*) * log->channel_capacity);
+    log->ld_channels = (ldChan**)malloc(sizeof(ldChan*) * log->channel_capacity);
     if (!log->ld_channels) {
         free(log);
         return NULL;
@@ -39,18 +39,15 @@ void motec_log_free(MotecLog* log) {
         free(log->ld_channels);
     }
     
-    if (log->ld_header) {
-        if (log->ld_header->aux) {
-            if (log->ld_header->aux->venue) {
-                if (log->ld_header->aux->venue->vehicle) {
-                    free(log->ld_header->aux->venue->vehicle);
-                }
-                free(log->ld_header->aux->venue);
-            }
-            free(log->ld_header->aux);
+    if (log->ld_header->event) {
+    if (log->ld_header->event->venue) {
+        if (log->ld_header->event->venue->vehicle) {
+            free(log->ld_header->event->venue->vehicle);
         }
-        free(log->ld_header);
+        free(log->ld_header->event->venue);
     }
+    free(log->ld_header->event);
+}
     
     free(log);
 }
@@ -59,7 +56,7 @@ int motec_log_initialize(MotecLog* log) {
     if (!log) return -1;
     
     // Create vehicle
-    LDVehicle* vehicle = (LDVehicle*)malloc(sizeof(LDVehicle));
+    ldVehicle* vehicle = (ldVehicle*)malloc(sizeof(ldVehicle));
     if (!vehicle) return -1;
     
     strncpy(vehicle->id, log->vehicle_id, sizeof(vehicle->id)-1);
@@ -68,7 +65,7 @@ int motec_log_initialize(MotecLog* log) {
     strncpy(vehicle->comment, log->vehicle_comment, sizeof(vehicle->comment)-1);
     
     // Create venue
-    LDVenue* venue = (LDVenue*)malloc(sizeof(LDVenue));
+    ldVenue* venue = (ldVenue*)malloc(sizeof(ldVenue));
     if (!venue) {
         free(vehicle);
         return -1;
@@ -78,7 +75,7 @@ int motec_log_initialize(MotecLog* log) {
     venue->vehicle_ptr = VEHICLE_PTR;
     venue->vehicle = vehicle;
     
-    LDEvent* event = (LDEvent*)malloc(sizeof(LDEvent));
+    ldEvent* event = (ldEvent*)malloc(sizeof(ldEvent));
     if (!event) {
         free(venue);
         free(vehicle);
@@ -91,7 +88,7 @@ int motec_log_initialize(MotecLog* log) {
     event->venue_ptr = VENUE_PTR;
     event->venue = venue;
     
-    log->ld_header = (LDHeader*)malloc(sizeof(LDHeader));
+    log->ld_header = (ldHead*)malloc(sizeof(ldHead));
     if (!log->ld_header) {
         free(event);
         free(venue);
@@ -123,7 +120,7 @@ int motec_log_add_channel(MotecLog* log, Channel* channel) {
     
     if (log->channel_count >= log->channel_capacity) {
         int new_capacity = log->channel_capacity * 2;
-        LDChannel** new_channels = (LDChannel**)realloc(log->ld_channels, 
+        ldChan** new_channels = (LDChannel**)realloc(log->ld_channels, 
             sizeof(LDChannel*) * new_capacity);
         if (!new_channels) return -1;
         
@@ -131,10 +128,10 @@ int motec_log_add_channel(MotecLog* log, Channel* channel) {
         log->channel_capacity = new_capacity;
     }
     
-    log->ld_header->data_ptr += sizeof(LDChannel);
+    log->ld_header->data_ptr += sizeof(ldChan);
     
     for (int i = 0; i < log->channel_count; i++) {
-        log->ld_channels[i]->data_ptr += sizeof(LDChannel);
+        log->ld_channels[i]->data_ptr += sizeof(ldChan);
     }
     
     int meta_ptr, prev_meta_ptr, data_ptr;
@@ -149,7 +146,7 @@ int motec_log_add_channel(MotecLog* log, Channel* channel) {
         data_ptr = log->ld_header->data_ptr;
     }
     
-    LDChannel* ld_channel = (LDChannel*)malloc(sizeof(LDChannel));
+    ldChan* ld_channel = (ldChan*)malloc(sizeof(LDChannel));
     if (!ld_channel) return -1;
     
     ld_channel->meta_ptr = meta_ptr;
@@ -203,7 +200,7 @@ int motec_log_write(MotecLog* log, const char* filename) {
         write_ld_header(log->ld_header, f, log->channel_count);
         
         for (int i = 0; i < log->channel_count; i++) {
-            LDChannel* chan = log->ld_channels[i];
+            ldChan* chan = log->ld_channels[i];
             fseek(f, chan->meta_ptr, SEEK_SET);
             write_ld_channel(chan, f, i);
             
@@ -218,7 +215,7 @@ int motec_log_write(MotecLog* log, const char* filename) {
     return 0;
 }
 
-void write_ld_header(LDHeader* header, FILE* f, int channel_count) {
+void write_ld_header(ldHead* header, FILE* f, int channel_count) {
 
     fwrite(&header->meta_ptr, sizeof(int), 1, f);
     fwrite(&header->data_ptr, sizeof(int), 1, f);
