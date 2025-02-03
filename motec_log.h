@@ -5,11 +5,17 @@
 #include "data_log.h"
 #include <time.h>
 
-// constants from original file
+// Constants from original file
 #define VEHICLE_PTR 1762
 #define VENUE_PTR 5078
 #define EVENT_PTR 8180
 #define HEADER_PTR 11336
+
+// Data type constants
+#define DTYPE_FLOAT32 1
+#define DTYPE_FLOAT16 2
+#define DTYPE_INT32 3
+#define DTYPE_INT16 4
 
 typedef struct {
     char driver[64];
@@ -26,8 +32,8 @@ typedef struct {
     
     ldHead* ld_header;
     ldChan** ld_channels;
-    int channel_count;
-    int channel_capacity;
+    size_t channel_count;
+    size_t channel_capacity;
 } MotecLog;
 
 MotecLog* motec_log_create(void);
@@ -37,7 +43,6 @@ int motec_log_add_channel(MotecLog* log, Channel* channel);
 int motec_log_add_all_channels(MotecLog* log, DataLog* data_log);
 int motec_log_write(MotecLog* log, const char* filename);
 void write_ld_header(ldHead* header, FILE* f, int channel_count);
-// void write_ld_channel(LDChannel* channel, FILE* f, int channel_index);
 void write_ld_channel(ldChan* channel, FILE* f, int channel_index);
 
 void motec_log_set_metadata(MotecLog* log, 
